@@ -1,7 +1,7 @@
 ;;;; package.lisp
 
-(defpackage #:parenscriptx
+(defpackage #:parenscriptm
   (:use #:cl #:cl-who)
   (:import-from #:cl-who #:htm)
-  (:export #:{ #:htm #:defreact))
+  (:export #:{ #:htm #:defmithril #:splice))
 

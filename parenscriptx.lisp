@@ -1,6 +1,9 @@
-;;;; parenscriptx.lisp
+;;;; parenscriptx.lisp(ql
 
-(in-package #:parenscriptx)
+
+(in-package #:parenscriptm)
+(defpackage "PARENSCRIPTM-GARBAGE")
+
 (declaim (optimize (speed 3) (space 0) (debug 0)))
 
 ;;; "parenscriptx" goes here. Hacks and glory await!
@@ -9,11 +12,9 @@
   (loop with tag = (car tree)
      for rest on (cdr tree) by #'cddr
      while (keywordp (car rest))
-     collect (ps::encode-js-identifier (string (car rest))) into attrs
-     collect (if (symbolp (cadr rest))
-		 (ps::encode-js-identifier (string (cadr rest)))
-		 (cadr rest))
-     into attrs
+     if (cadr rest) collect (ps::encode-js-identifier (string (car rest))) into attrs
+     and
+     collect (cadr rest) into attrs
      finally (return (values tag attrs rest))))
 
 (defun html-element-p (keyword)
@@ -28,20 +29,38 @@
   (if (and (consp tree) (keywordp (car tree)))
       (multiple-value-bind (tag attrs body)
 	  (split-tag-parts tree)
-	`(ps:chain
-	  *react
-	  (create-element
-	   ,(if (html-element-p tag)
-		(ps::encode-js-identifier (string tag))
-		(intern (string tag) *package*))
-	   (ps:create ,@attrs)
-	   ,@(loop for item in body
-		  collect `(htm ,item)))))
+	(if (html-element-p tag)
+	    `(m
+	      ,(ps::encode-js-identifier (string tag))
+	      (let ((result (ps:create))
+		    (attrs (ps:array ,@attrs)))
+		(loop for i from 0 below (ps:@ attrs length) by 2
+		     when (not (equal (elt attrs (1+ i)) nil))
+		     do (setf (elt result (elt attrs i)) (elt attrs (1+ i))))
+		result)
+	      (ps:array
+	       ,@(loop for item in body
+		    collect `(htm ,item))))
+	    `(ps:chain
+	      m
+	      (component
+	       ;,(ps::encode-js-identifier (string tag))
+	       ,(intern (string tag) "PARENSCRIPTM-GARBAGE")
+	       ;(ps:create ,@attrs)
+	       (let ((result (ps:create))
+		     (attrs (ps:array ,@attrs)))
+		 (loop for i from 0 below (ps:@ attrs length) by 2
+		    when (not (equal (elt attrs (1+ i)) nil))
+		    do (setf (elt result (elt attrs i)) (elt attrs (1+ i))))
+		 result)
+	       (ps:array
+		,@(loop for item in body
+		     collect `(htm ,item)))))))
       tree))
 
-(ps:defpsmacro defreact (name &rest args)
+(ps:defpsmacro defmithril (name &rest args)
   `(ps:var ,name 
-	       (ps:chain *react (create-class (ps:create ,@args)))))
+	       (ps:create ,@args)))
    
 
 ;;; The following two macros are for backwards-compatibility
