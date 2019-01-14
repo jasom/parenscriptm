@@ -25,37 +25,68 @@
   `(progn ,@(mapcar #'psx-htm-item trees))
   (psx-htm-item (car trees))))
 
+(ps:defpsmacro psm-header ()
+  `(progn
+     (defun ps-munge (obj)
+       (let ((result (ps:create)))
+	 (loop for i in (ps:chain *object (entries obj))
+	    do
+	      (setf (elt result (elt i 0))
+		    (if (eql null (elt i 1))
+			ps:false
+			(elt i 1))))
+	 result))
+     (defun make-vnode (tag key attrs0 children)
+       (create
+	tag tag
+	key key
+	attrs attrs0
+	children children
+	text undefined
+	dom undefined
+	dom-size undefined
+	state undefined
+	_state undefined
+	events undefined
+	instance undefined
+	skip false))
+     (defun normalize-node (node)
+       (cond
+	 ((ps:chain *array (is-array node))
+	  (make-node :[ undefined undefined (normalize-children node)))
+	 ((not (or (eql node nil)
+		   (eql (ps:typeof node) :object)))
+	  (make-vnode :# undefined undefined (if (eql node false) "" node)))
+	 (t node)))
+     (defun normalize-children (children)
+       (loop for i from 0 below (ps:@ children length)
+	    do (setf (ps:@ children i)
+		  (normalize-node (ps:@ children i)))))
+     (defun simple-node (tag attrs children)
+       (let* ((attrs (ps-munge attrs))
+	      (key-count (ps:chain *object (keys attrs) length)))
+	  (make-vnode tag
+		      (ps:@ attrs key)
+		      (if (or (> key-count 2)
+			      (not (ps:in :key attrs)))
+			  attrs ps:undefined)
+		      (normalize-children children))))))
+
+
+
 (defun psx-htm-item (tree)
   (if (and (consp tree) (keywordp (car tree)))
       (multiple-value-bind (tag attrs body)
 	  (split-tag-parts tree)
-	(if (html-element-p tag)
-	    `(m
-	      ,(ps::encode-js-identifier (string tag))
-	      (let ((result (ps:create))
-		    (attrs (ps:array ,@attrs)))
-		(loop for i from 0 below (ps:@ attrs length) by 2
-		     when (not (equal (elt attrs (1+ i)) nil))
-		     do (setf (elt result (elt attrs i)) (elt attrs (1+ i))))
-		result)
-	      (ps:array
-	       ,@(loop for item in body
-		    collect `(htm ,item))))
-	    `(ps:chain
-	      m
-	      (component
-	       ;,(ps::encode-js-identifier (string tag))
-	       ,(intern (string tag) "PARENSCRIPTM-GARBAGE")
-	       ;(ps:create ,@attrs)
-	       (let ((result (ps:create))
-		     (attrs (ps:array ,@attrs)))
-		 (loop for i from 0 below (ps:@ attrs length) by 2
-		    when (not (equal (elt attrs (1+ i)) nil))
-		    do (setf (elt result (elt attrs i)) (elt attrs (1+ i))))
-		 result)
-	       (ps:array
-		,@(loop for item in body
-		     collect `(htm ,item)))))))
+	`(m
+	  ,(if (html-element-p tag)
+	      (ps::encode-js-identifier (string tag))
+	      (intern (string tag) "PARENSCRIPTM-GARBAGE"))
+	  (ps-munge
+	   (ps:create ,@attrs))
+	  (ps:array
+	   ,@(loop for item in body
+		collect `(htm ,item)))))
       tree))
 
 (ps:defpsmacro defmithril (name &rest args)
